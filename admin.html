@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kavak Quote Data — Admin</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --tx:#e6e9ef; --dim:#9aa3b2; --acc:#4f8cff; --ok:#3ecf8e; --warn:#ffb020; --err:#ff5a5a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .sp{flex:1}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
+  .card>h2{margin:0;padding:12px 16px;font-size:13px;font-weight:600;letter-spacing:.02em;border-bottom:1px solid var(--line);color:var(--dim);text-transform:uppercase}
+  .card>.body{padding:16px}
+
+  button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;
+         transition:background .15s,color .15s,border-color .15s;min-height:34px}
+  button:hover:not(:disabled){filter:brightness(1.1)}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--tx)}
+  button.danger{background:transparent;border:1px solid var(--line);color:var(--err)}
+  button.sm{padding:5px 11px;font-size:12px;min-height:28px}
+
+  /* Save buttons: grey and inert until something actually changes. */
+  button.save.clean{background:transparent;border:1px solid var(--line);color:var(--dim);cursor:default}
+  button.save.clean:hover{filter:none}
+  button.save.dirty{background:var(--acc);border:1px solid var(--acc);color:#fff}
+  button.save.dirty::before{content:"● ";color:var(--warn);font-size:9px;vertical-align:middle}
+
+  /* Loader: hide the label, spin a ring in its place, keep the width stable. */
+  button.busy{color:transparent !important;pointer-events:none;position:relative}
+  button.busy::before{content:none !important}
+  button.busy::after{
+    content:"";position:absolute;inset:0;margin:auto;width:14px;height:14px;
+    border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;
+    animation:spin .6s linear infinite}
+  button.save.clean.busy::after{border-color:rgba(154,163,178,.3);border-top-color:var(--dim)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  button:disabled{opacity:.55}
+
+  input,textarea,select{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:6px;padding:8px 10px;font:inherit;width:100%;
+                        transition:border-color .15s}
+  input.changed,textarea.changed{border-color:var(--warn)}
+  input:disabled{opacity:.6}
+  textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.5}
+  label{display:block;font-size:12px;color:var(--dim);margin:0 0 5px}
+  .row{display:flex;gap:8px;align-items:center}
+  .svc{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--panel2)}
+  .svc>summary{padding:11px 14px;cursor:pointer;font-weight:500;display:flex;align-items:center;gap:10px;list-style:none}
+  .svc>summary::-webkit-details-marker{display:none}
+  .svc>summary::before{content:"▸";color:var(--dim);transition:transform .15s}
+  .svc[open]>summary::before{transform:rotate(90deg)}
+  .svc .inner{padding:0 14px 14px;border-top:1px solid var(--line)}
+  code.col{background:#0c0e12;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:12px;color:var(--acc)}
+  .item{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .item input{flex:1}
+  .muted{color:var(--dim);font-size:12.5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:500}
+  .pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
+  .pill.ok{color:var(--ok);border-color:#1d4d3a} .pill.err{color:var(--err);border-color:#5a2020}
+  .pill.pend{color:var(--warn);border-color:#5a4520}
+  #toast{position:fixed;right:18px;bottom:18px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--acc);padding:11px 15px;border-radius:7px;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;max-width:420px;z-index:20}
+  #toast.show{opacity:1;transform:none}
+  #toast.err{border-left-color:var(--err)}
+  #login{max-width:340px;margin:14vh auto}
+  .hide{display:none}
+  .hint{font-size:11.5px;color:var(--dim);margin-top:5px}
+</style>
+</head>
+<body>
+
+<div id="login" class="card">
+  <h2>Admin sign in</h2>
+  <div class="body">
+    <label>Email</label>
+    <input id="email" type="email" autocomplete="username" placeholder="you@kavak.com">
+    <label style="margin-top:10px">Password</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top:14px">
+      <button id="signin">Sign in</button>
+      <span id="loginMsg" class="muted"></span>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <h1>Quote Data Admin</h1>
+    <span class="sp"></span>
+    <span id="who" class="muted"></span>
+    <button class="ghost sm" id="signout">Sign out</button>
+  </header>
+
+  <div class="wrap">
+
+    <div class="card">
+      <h2>Services</h2>
+      <div class="body">
+        <p class="muted" style="margin-top:0">
+          These come from the lease/rental columns of the sheet. Editing a header rewrites it in
+          Google Sheets exactly as typed. Line 1 is the plan name and drives the Postgres column;
+          line 2 is the package text shown in the app.
+        </p>
+        <div id="services"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>All columns</h2>
+      <div class="body">
+        <p class="muted" style="margin-top:0">Rename any column. Protected columns are the natural keys and cannot be renamed.</p>
+        <table>
+          <thead><tr><th style="width:44px">#</th><th>Header</th><th style="width:210px">Postgres column</th><th style="width:96px"></th></tr></thead>
+          <tbody id="cols"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sync status</h2>
+      <div class="body">
+        <div class="row" style="margin-bottom:12px">
+          <button class="ghost sm" id="refresh">Refresh</button>
+          <span id="pendCount" class="muted"></span>
+        </div>
+        <table>
+          <thead><tr><th>When</th><th>Source</th><th>Status</th><th>Rows</th><th>Column changes</th></tr></thead>
+          <tbody id="log"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_URL = 'https://wpigboshlcehnlyipado.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_JjaZx9jlscUnVbO_lHS3GQ_0RbYVOON';
+
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const $  = (s) => document.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let toastTimer;
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = ''), 4200);
+}
+
+/* ---------- dirty tracking ----------
+   Every editable field carries its saved value in data-orig. A save button
+   compares its group against those and only lights up on a real difference,
+   so re-typing the same text leaves the button inert.                      */
+
+function isDirty(group) {
+  return $$('[data-orig]', group).some(el => el.value !== el.dataset.orig);
+}
+
+function refresh(group) {
+  const btn = group.querySelector('button.save');
+  if (!btn) return;
+  const dirty = isDirty(group);
+  btn.classList.toggle('dirty', dirty);
+  btn.classList.toggle('clean', !dirty);
+  btn.disabled = !dirty;
+  btn.title = dirty ? 'Unsaved changes' : 'No changes';
+  $$('[data-orig]', group).forEach(el =>
+    el.classList.toggle('changed', el.value !== el.dataset.orig));
+}
+
+function refreshAll() { $$('.editgroup').forEach(refresh); }
+
+document.addEventListener('input', (e) => {
+  const g = e.target.closest?.('.editgroup');
+  if (g) refresh(g);
+});
+
+/* Wrap any async action with a spinner and a guaranteed re-enable. */
+async function withLoader(btn, fn) {
+  if (!btn) return fn();
+  const wasDisabled = btn.disabled;
+  btn.classList.add('busy');
+  btn.disabled = true;
+  try { return await fn(); }
+  finally {
+    btn.classList.remove('busy');
+    btn.disabled = wasDisabled;
+  }
+}
+
+/* ---------------- auth ---------------- */
+$('#signin').onclick = (e) => withLoader(e.target, async () => {
+  $('#loginMsg').textContent = 'Signing in…';
+  const { error } = await sb.auth.signInWithPassword({
+    email: $('#email').value.trim(), password: $('#pw').value
+  });
+  $('#loginMsg').textContent = error ? error.message : '';
+});
+$('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#signin').click(); });
+$('#signout').onclick = () => sb.auth.signOut();
+
+sb.auth.onAuthStateChange(async (_e, session) => {
+  if (!session) {
+    $('#app').classList.add('hide');
+    $('#login').classList.remove('hide');
+    return;
+  }
+  const { data: isAdmin } = await sb.rpc('is_admin');
+  if (!isAdmin) {
+    $('#loginMsg').textContent = 'This account is not an admin.';
+    await sb.auth.signOut();
+    return;
+  }
+  $('#who').textContent = session.user.email;
+  $('#login').classList.add('hide');
+  $('#app').classList.remove('hide');
+  loadAll();
+});
+
+/* ---------------- data ---------------- */
+let columns = [], coverage = {}, groups = [], items = [];
+
+async function loadAll() {
+  // Keep whichever services the user had expanded.
+  const open = new Set($$('.svc[open]').map(d => d.dataset.col));
+
+  const [c, cv, g] = await Promise.all([
+    sb.from('sheet_columns_new').select('*').eq('is_active', true).order('sort_order'),
+    sb.from('service_coverage_new').select('*'),
+    sb.from('coverage_groups_new').select('*').order('sort_order')
+  ]);
+  if (c.error) return toast(c.error.message, true);
+
+  columns = c.data || [];
+  coverage = Object.fromEntries((cv.data || []).map(r => [r.db_column, r]));
+  groups = g.data || [];
+
+  const ids = groups.map(x => x.id);
+  items = ids.length
+    ? ((await sb.from('coverage_items_new').select('*').in('group_id', ids).order('sort_order')).data || [])
+    : [];
+
+  renderServices(open);
+  renderColumns();
+  refreshAll();
+  loadLog();
+}
+
+function renderServices(open) {
+  const svc = columns.filter(c => c.is_service);
+  $('#services').innerHTML = svc.map(c => {
+    const cv = coverage[c.db_column] || {};
+    const gs = groups.filter(g => g.db_column === c.db_column);
+    return `
+    <details class="svc" data-col="${esc(c.db_column)}" ${open?.has(c.db_column) ? 'open' : ''}>
+      <summary>${esc(c.plan_key)} <code class="col">${esc(c.db_column)}</code></summary>
+      <div class="inner">
+
+        <div class="editgroup" style="margin:14px 0">
+          <label>Header text — exactly as it appears in the sheet</label>
+          <textarea rows="3" data-orig="${esc(c.sheet_header)}" data-hdr="${esc(c.db_column)}">${esc(c.sheet_header)}</textarea>
+          <div class="hint">Changing line 1 renames the Postgres column. Line 2 is the package text.</div>
+          <div class="row" style="margin-top:8px">
+            <button class="save sm clean" disabled data-save-hdr="${esc(c.db_column)}">Save &amp; push to sheet</button>
+          </div>
+        </div>
+
+        <div class="editgroup">
+          <div class="grid" style="margin-bottom:14px">
+            <div>
+              <label>Duration</label>
+              <input data-orig="${esc(cv.duration || '')}" data-dur="${esc(c.db_column)}" value="${esc(cv.duration || '')}">
+            </div>
+            <div>
+              <label>Package text (from line 2, read-only)</label>
+              <input value="${esc(cv.package_text || '')}" disabled>
+            </div>
+          </div>
+          ${gs.map(g => `
+            <div style="margin-bottom:12px">
+              <label>${esc(g.group_name)}</label>
+              <div data-items="${g.id}">
+                ${items.filter(i => i.group_id === g.id).map(i => `
+                  <div class="item">
+                    <input data-orig="${esc(i.item_text)}" data-item="${i.id}" value="${esc(i.item_text)}">
+                    <button class="danger sm" data-del="${i.id}">✕</button>
+                  </div>`).join('')}
+              </div>
+              <button class="ghost sm" data-add="${g.id}">+ Add item</button>
+            </div>`).join('')}
+          <div class="row" style="margin-top:12px">
+            <button class="save sm clean" disabled data-save-cov="${esc(c.db_column)}">Save coverage</button>
+          </div>
+        </div>
+
+      </div>
+    </details>`;
+  }).join('');
+}
+
+function renderColumns() {
+  $('#cols').innerHTML = columns.map(c => `
+    <tr class="editgroup">
+      <td class="muted">${c.col_index}</td>
+      <td><input data-orig="${esc(c.sheet_header)}" data-colhdr="${esc(c.db_column)}"
+                 value="${esc(c.sheet_header)}" ${c.is_protected ? 'disabled' : ''}></td>
+      <td><code class="col">${esc(c.db_column)}</code>${c.pending_push ? ' <span class="pill pend">pending</span>' : ''}</td>
+      <td>${c.is_protected ? '<span class="muted">protected</span>'
+            : `<button class="save sm clean" disabled data-save-col="${esc(c.db_column)}">Save</button>`}</td>
+    </tr>`).join('');
+}
+
+async function loadLog() {
+  const { data } = await sb.from('sync_log_new').select('*').order('started_at', { ascending: false }).limit(12);
+  $('#log').innerHTML = (data || []).map(r => {
+    const ch = [];
+    if (r.columns_added?.length)   ch.push(`+${r.columns_added.length}`);
+    if (r.columns_renamed?.length) ch.push(`~${r.columns_renamed.length}`);
+    if (r.columns_retired?.length) ch.push(`-${r.columns_retired.length}`);
+    return `<tr>
+      <td>${new Date(r.started_at).toLocaleString('en-GB')}</td>
+      <td>${esc(r.trigger_source)}</td>
+      <td><span class="pill ${r.status === 'ok' ? 'ok' : 'err'}">${esc(r.status)}</span></td>
+      <td>${r.rows_upserted ?? 0}</td>
+      <td class="muted">${ch.join(' ') || '—'}${r.error ? ' · ' + esc(r.error).slice(0, 60) : ''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No syncs yet.</td></tr>';
+
+  const pend = columns.filter(c => c.pending_push).length;
+  $('#pendCount').textContent = pend ? `${pend} header change(s) waiting to reach the sheet` : 'All headers in sync';
+}
+
+$('#refresh').onclick = (e) => withLoader(e.target, loadAll);
+
+/* ---------------- actions ---------------- */
+async function saveHeader(dbColumn, text) {
+  const { data, error } = await sb.rpc('admin_set_header', {
+    p_db_column: dbColumn, p_new_header: text
+  });
+  if (error) { toast(error.message, true); return false; }
+  toast(data.renamed
+    ? `Renamed ${data.previous} → ${data.db_column}. Queued for the sheet.`
+    : 'Saved. Queued for the sheet — no column rename needed.');
+  await loadAll();
+  return true;
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target;
+  if (!(t instanceof HTMLButtonElement)) return;
+
+  if (t.dataset.saveHdr) {
+    const col = t.dataset.saveHdr;
+    await withLoader(t, () =>
+      saveHeader(col, document.querySelector(`[data-hdr="${CSS.escape(col)}"]`).value));
+  }
+
+  if (t.dataset.saveCol) {
+    const col = t.dataset.saveCol;
+    await withLoader(t, () =>
+      saveHeader(col, document.querySelector(`[data-colhdr="${CSS.escape(col)}"]`).value));
+  }
+
+  if (t.dataset.add) {
+    const gid = Number(t.dataset.add);
+    await withLoader(t, async () => {
+      const n = items.filter(i => i.group_id === gid).length;
+      const { error } = await sb.from('coverage_items_new')
+        .insert({ group_id: gid, item_text: 'New item', sort_order: n + 1 });
+      if (error) return toast(error.message, true);
+      await loadAll();
+    });
+  }
+
+  if (t.dataset.del) {
+    await withLoader(t, async () => {
+      const { error } = await sb.from('coverage_items_new').delete().eq('id', Number(t.dataset.del));
+      if (error) return toast(error.message, true);
+      await loadAll();
+    });
+  }
+
+  if (t.dataset.saveCov) {
+    const col = t.dataset.saveCov;
+    const group = t.closest('.editgroup');
+
+    await withLoader(t, async () => {
+      const durEl = group.querySelector(`[data-dur="${CSS.escape(col)}"]`);
+      if (durEl.value !== durEl.dataset.orig) {
+        const { error } = await sb.from('service_coverage_new')
+          .update({ duration: durEl.value }).eq('db_column', col);
+        if (error) return toast(error.message, true);
+      }
+
+      // Only write the rows that actually changed.
+      const changed = $$('[data-item]', group).filter(el => el.value !== el.dataset.orig);
+      for (const el of changed) {
+        const { error } = await sb.from('coverage_items_new')
+          .update({ item_text: el.value }).eq('id', Number(el.dataset.item));
+        if (error) return toast(error.message, true);
+      }
+
+      toast(changed.length
+        ? `Saved — ${changed.length} item(s) updated.`
+        : 'Saved.');
+      await loadAll();
+    });
+  }
+});
+</script>
+</body>
+</html>
